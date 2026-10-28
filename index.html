@@ -108,6 +108,8 @@ select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8
 .preset .nm{font-size:.72rem;color:var(--muted);line-height:1.2}
 .swingval{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-weight:700}
 .dim{opacity:.4}
+.stack{display:flex;flex-direction:column;gap:8px}
+.stack p{margin:0}
 .loadmsg{color:var(--muted);font-size:.85rem}
 
 @media (max-width:520px){
@@ -135,7 +137,7 @@ select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8
     <div class="readout">
       <div class="word" id="word" aria-live="off">1</div>
       <div class="tempo">
-        <div class="bpm"><span id="bpmShow">90</span><small>BPM</small></div>
+        <div class="bpm"><span id="bpmShow">90</span><small id="bpmUnit">BPM</small></div>
         <div class="feel" id="feel">16ths · straight</div>
         <div class="loadmsg" id="loadmsg"></div>
       </div>
@@ -155,22 +157,37 @@ select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8
       <h2>Tempo &amp; meter</h2>
       <div class="row">
         <button class="btn" id="minus" aria-label="Slower">−</button>
-        <input type="range" id="bpm" min="30" max="260" value="90" class="grow" aria-label="Tempo">
+        <input type="range" id="bpm" min="30" max="300" value="90" class="grow" aria-label="Tempo">
         <button class="btn" id="plus" aria-label="Faster">+</button>
       </div>
       <div class="row">
-        <input type="number" id="bpmNum" class="num" min="30" max="260" value="90" aria-label="BPM">
+        <input type="number" id="bpmNum" class="num" min="30" max="300" value="90" aria-label="BPM">
         <button class="btn" id="tap">Tap tempo</button>
         <span class="small" id="tapInfo"></span>
       </div>
-      <div class="row">
+      <div class="label">Time signature</div>
+      <div class="seg" id="meterSeg" role="group" aria-label="Time signature">
+        <button data-m="simple">Simple</button>
+        <button data-m="6">6/8</button>
+        <button data-m="9">9/8</button>
+        <button data-m="12">12/8</button>
+      </div>
+      <div class="row" id="beatsRow">
         <label class="label" for="beatsPer">Beats per measure</label>
         <select id="beatsPer"></select>
+      </div>
+      <div id="pulseRow" class="stack">
+        <div class="seg" id="pulseSeg" role="group" aria-label="What the click follows">
+          <button data-p="big">Big beats ♩.</button>
+          <button data-p="eighth">Every 8th ♪</button>
+        </div>
+        <p class="small" id="pulseNote"></p>
       </div>
     </section>
 
     <section class="panel">
       <h2>Subdivision</h2>
+      <p class="small" id="subNote" hidden></p>
       <div class="seg" id="subSeg" role="group" aria-label="Subdivision">
         <button data-sub="1">Quarters</button>
         <button data-sub="2">8ths</button>
@@ -178,13 +195,13 @@ select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8
         <button data-sub="4">16ths</button>
       </div>
       <div class="row" id="tripStyleRow">
-        <label class="label" for="tripStyle">Say triplets as</label>
+        <label class="label" for="tripStyle" id="tripLabel">Say triplets as</label>
         <select id="tripStyle">
           <option value="trip">1 trip let</option>
           <option value="and">1 and a</option>
         </select>
       </div>
-      <div>
+      <div id="presetWrap">
         <div class="label" style="margin-bottom:6px">Rhythm group · applies to every beat</div>
         <div class="presets" id="presets"></div>
       </div>
@@ -207,9 +224,17 @@ select{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8
 
     <section class="panel">
       <h2>Sound</h2>
+      <div class="row">
+        <label class="label" for="clickType" style="width:92px">Click sound</label>
+        <select id="clickType">
+          <option value="wood">Woodblock</option>
+          <option value="beep">Beep (loudest)</option>
+          <option value="stick">Drumstick</option>
+        </select>
+      </div>
       <div class="row"><span class="label" style="width:92px">Voice</span><input type="range" id="vVoice" min="0" max="100" value="90" class="grow" aria-label="Voice volume"></div>
-      <div class="row"><span class="label" style="width:92px">Beat click</span><input type="range" id="vBeat" min="0" max="100" value="55" class="grow" aria-label="Beat click volume"></div>
-      <div class="row"><span class="label" style="width:92px">Sub click</span><input type="range" id="vSub" min="0" max="100" value="25" class="grow" aria-label="Subdivision click volume"></div>
+      <div class="row"><span class="label" style="width:92px">Beat click</span><input type="range" id="vBeat" min="0" max="100" value="85" class="grow" aria-label="Beat click volume"></div>
+      <div class="row"><span class="label" style="width:92px">Sub click</span><input type="range" id="vSub" min="0" max="100" value="60" class="grow" aria-label="Subdivision click volume"></div>
       <label class="check"><input type="checkbox" id="accent" checked> Accent beat 1</label>
       <label class="check"><input type="checkbox" id="numbersOnly"> Voice says beat numbers only</label>
       <label class="check"><input type="checkbox" id="clickRests" checked> Click on the beat even when it rests</label>
@@ -222,6 +247,7 @@ const VOICE = {"1": "data:audio/wav;base64,UklGRgwjAABXQVZFZm10IBAAAAABAAEAgD4AA
 
 /* ---------- rhythm presets ---------- */
 // each preset: on/off per cell; durations derived from gaps
+const COMPOUND_NAMES = {"1,1,1":"Three 8ths","1,0,1":"Quarter + 8th","1,1,0":"8th + quarter","0,1,1":"8th rest + two","1,0,0":"Dotted quarter","0,1,0":"Middle 8th","0,0,1":"Last 8th"};
 const PRESETS = {
   1: [{p:[1], nm:"Quarter"}],
   2: [
@@ -258,10 +284,18 @@ const PRESETS = {
 };
 
 /* ---------- state ---------- */
-const S = {bpm:90, beats:4, sub:4, swing:50, trip:"trip", vVoice:90, vBeat:55, vSub:25, accent:true, numbersOnly:false, clickRests:true, pattern:null};
-try{ Object.assign(S, JSON.parse(localStorage.getItem("cm-settings")||"{}")); }catch(e){}
-function save(){ try{ localStorage.setItem("cm-settings", JSON.stringify(S)); }catch(e){} }
+const S = {bpm:90, beats:4, sub:4, swing:50, trip:"trip", vVoice:90, vBeat:85, vSub:60, accent:true, numbersOnly:false, clickRests:true, pattern:null,
+  meter:"simple", pulse:"big", simpleBeats:4, simpleSub:4, clickType:"wood"};
+try{
+  const v2 = localStorage.getItem("cm-settings-v2");
+  if(v2) Object.assign(S, JSON.parse(v2));
+  else { const old = JSON.parse(localStorage.getItem("cm-settings")||"{}"); delete old.vBeat; delete old.vSub; Object.assign(S, old); S.simpleBeats=S.beats; S.simpleSub=S.sub; }
+}catch(e){}
+function save(){ try{ localStorage.setItem("cm-settings-v2", JSON.stringify(S)); }catch(e){} }
+const isCompound = ()=> S.meter!=="simple";
+const isEighthPulse = ()=> isCompound() && S.pulse==="eighth";
 function freshPattern(p){ return Array.from({length:S.beats},()=> (p||Array(S.sub).fill(1)).slice()); }
+if(S.meter!=="simple"){ if(S.pulse==="eighth"){S.beats=+S.meter;S.sub=1;} else {S.beats=+S.meter/3;S.sub=3;} }
 if(!Array.isArray(S.pattern) || S.pattern.length!==S.beats || S.pattern[0].length!==S.sub) S.pattern = freshPattern();
 
 const $ = id => document.getElementById(id);
@@ -290,11 +324,15 @@ function cellOffsets(){ // fractions of a beat
 }
 
 /* ---------- audio ---------- */
-let ctx=null, buffers={}, master, playing=false, nextBeatTime=0, beatIdx=0, timer=null, queue=[], lastVoice=null, wake=null;
+let ctx=null, buffers={}, master, noiseBuf, playing=false, nextBeatTime=0, beatIdx=0, timer=null, queue=[], lastVoice=null, wake=null;
 async function initAudio(){
   if(ctx) return;
   ctx = new (window.AudioContext||window.webkitAudioContext)();
-  master = ctx.createGain(); master.gain.value=1; master.connect(ctx.destination);
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value=-14; comp.knee.value=8; comp.ratio.value=5; comp.attack.value=0.001; comp.release.value=0.08;
+  master = ctx.createGain(); master.gain.value=1.25; master.connect(comp).connect(ctx.destination);
+  noiseBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate*0.05), ctx.sampleRate);
+  const nd = noiseBuf.getChannelData(0); for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
   $("loadmsg").textContent="Loading voice…";
   await Promise.all(Object.entries(VOICE).map(async([k,uri])=>{
     const b64 = uri.split(",")[1], bin = atob(b64), u8 = new Uint8Array(bin.length);
@@ -303,17 +341,33 @@ async function initAudio(){
   }));
   $("loadmsg").textContent="";
 }
+// kinds: down (beat 1), beat, light (in-between 8ths in compound), sub (subdivisions)
 function click(t, kind){
-  const vol = (kind==="sub"? S.vSub : S.vBeat)/100;
+  const vol = ((kind==="sub"||kind==="light") ? S.vSub : S.vBeat)/100 * 1.6;
   if(vol<=0) return;
-  const o = ctx.createOscillator(), g = ctx.createGain();
-  o.type = "triangle";
-  o.frequency.value = kind==="down" ? 1760 : kind==="beat" ? 1175 : 880;
-  const peak = vol * (kind==="down"?0.9: kind==="beat"?0.7:0.45);
-  g.gain.setValueAtTime(0.0001,t);
-  g.gain.exponentialRampToValueAtTime(peak, t+0.002);
-  g.gain.exponentialRampToValueAtTime(0.0001, t+(kind==="sub"?0.03:0.05));
-  o.connect(g).connect(master); o.start(t); o.stop(t+0.07);
+  const lvl = {down:1, beat:0.8, light:0.75, sub:0.62}[kind];
+  const peak = vol*lvl;
+  const env = (node, dur)=>{ const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(peak,t+0.001); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); node.connect(g).connect(master); return g; };
+  if(S.clickType==="beep"){
+    const o=ctx.createOscillator(); o.type="square";
+    o.frequency.value = {down:2400, beat:1800, light:1400, sub:1200}[kind];
+    env(o, kind==="sub"||kind==="light" ? 0.035 : 0.06); o.start(t); o.stop(t+0.08);
+  } else if(S.clickType==="stick"){
+    const n=ctx.createBufferSource(); n.buffer=noiseBuf;
+    const bp=ctx.createBiquadFilter(); bp.type="bandpass"; bp.Q.value=1.2;
+    bp.frequency.value = {down:4200, beat:3200, light:2600, sub:2400}[kind];
+    n.connect(bp); env(bp, 0.035); n.start(t); n.stop(t+0.05);
+    const o=ctx.createOscillator(); o.type="sine"; o.frequency.setValueAtTime(bp.frequency.value/2,t);
+    env(o, 0.02); o.start(t); o.stop(t+0.03);
+  } else { // woodblock: pitched knock + bright attack, centred where phone speakers are loudest
+    const f = {down:2000, beat:1500, light:1250, sub:1100}[kind];
+    const o=ctx.createOscillator(); o.type="sine";
+    o.frequency.setValueAtTime(f*1.25,t); o.frequency.exponentialRampToValueAtTime(f,t+0.012);
+    env(o, kind==="sub"||kind==="light" ? 0.045 : 0.07); o.start(t); o.stop(t+0.09);
+    const o2=ctx.createOscillator(); o2.type="square"; o2.frequency.value=f*2.7;
+    const g2=ctx.createGain(); g2.gain.setValueAtTime(peak*0.35,t); g2.gain.exponentialRampToValueAtTime(0.0001,t+0.012);
+    o2.connect(g2).connect(master); o2.start(t); o2.stop(t+0.02);
+  }
 }
 function speak(t, key, cellDur, loud){
   const vol = S.vVoice/100; const buf = buffers[key];
@@ -333,14 +387,16 @@ function speak(t, key, cellDur, loud){
 }
 function scheduleBeat(b, t){
   const beatDur = 60/S.bpm, offs = cellOffsets(), pat = S.pattern[b] || Array(S.sub).fill(1);
-  if(S.clickRests || pat[0]) click(t, (b===0 && S.accent) ? "down" : "beat");
+  const groupStart = !isEighthPulse() || b%3===0;
+  const kind = (b===0 && S.accent) ? "down" : groupStart ? "beat" : "light";
+  if(S.clickRests || pat[0]) click(t, kind);
   offs.forEach((f,i)=>{
     const tt = t + f*beatDur;
     const next = i+1<offs.length ? offs[i+1] : 1;
     const cellDur = (next-f)*beatDur;
     if(pat[i]){
       if(i>0) click(tt,"sub");
-      if(!(S.numbersOnly && i>0)) speak(tt, voiceKey(syll(b,i)), Math.max(cellDur, beatDur/S.sub*0.75), i===0);
+      if(!(S.numbersOnly && i>0)) speak(tt, voiceKey(syll(b,i)), Math.max(cellDur, beatDur/S.sub*0.75), i===0 && groupStart);
     }
     queue.push({t:tt, b, i});
   });
@@ -422,12 +478,13 @@ function renderPresets(){
       else { j=i+1; while(j<pr.p.length && !pr.p[j]) j++; bar += `<span class="r" style="flex:${j-i}"></span>`; }
       i=j;
     }
-    b.innerHTML = `<div class="bar">${bar}</div><span class="sy">${presetLabel(pr.p)}</span><span class="nm">${pr.nm}</span>`;
+    b.innerHTML = `<div class="bar">${bar}</div><span class="sy">${presetLabel(pr.p)}</span><span class="nm">${(isCompound() && COMPOUND_NAMES[pr.p.join()]) || pr.nm}</span>`;
     b.onclick = ()=>{ S.pattern = freshPattern(pr.p); save(); renderBeats(); renderPresets(); };
     box.appendChild(b);
   });
 }
 function feelText(){
+  if(isCompound()) return `${S.meter}/8 · ` + (isEighthPulse() ? "every 8th" : `${S.beats} big beats`);
   const names={1:"Quarters",2:"8ths",3:"Triplets",4:"16ths"};
   let sw = "straight";
   if((S.sub===2||S.sub===4) && S.swing>50) sw = `swing ${S.swing}%`;
@@ -436,24 +493,40 @@ function feelText(){
 }
 function syncUI(){
   $("bpm").value=S.bpm; $("bpmNum").value=S.bpm; $("bpmShow").textContent=S.bpm;
+  $("bpmUnit").textContent = isCompound() ? (isEighthPulse() ? "♪ BPM" : "♩. BPM") : "BPM";
+  document.querySelectorAll("#meterSeg button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.m===S.meter ? "true":"false"));
+  document.querySelectorAll("#pulseSeg button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.p===S.pulse ? "true":"false"));
+  $("beatsRow").hidden = isCompound();
+  $("pulseRow").hidden = !isCompound();
+  const n=+S.meter, groups=n/3;
+  $("pulseNote").textContent = !isCompound() ? "" : isEighthPulse()
+    ? `Clicks all ${n} eighth notes and accents ${[...Array(groups)].map((_,g)=>g*3+1).join(", ")}. Set the tempo to the eighth-note speed. Good for slow pieces.`
+    : `Clicks ${groups} big beats with three 8ths in each. Set the tempo to the dotted-quarter speed (eighth-note speed ÷ 3).`;
+  $("subSeg").hidden = isCompound();
+  $("subNote").hidden = !isCompound();
+  $("subNote").textContent = isEighthPulse() ? "Each eighth note is its own beat, so there is nothing to subdivide. Tap boxes in the measure to rest notes." : "In compound time each big beat splits into three 8ths. Pick a rhythm group below or tap boxes in the measure.";
+  $("presetWrap").hidden = isEighthPulse();
+  $("clickType").value = S.clickType;
   $("beatsPer").value=S.beats;
   document.querySelectorAll("#subSeg button").forEach(b=>b.setAttribute("aria-pressed", +b.dataset.sub===S.sub ? "true":"false"));
-  $("tripStyleRow").hidden = S.sub!==3;
+  $("tripStyleRow").hidden = S.sub!==3 || isEighthPulse();
   $("tripStyle").value=S.trip;
+  $("tripLabel").textContent = isCompound() ? "Count the 8ths as" : "Say triplets as";
   $("swing").value=S.swing;
   const ratio = (S.swing/(100-S.swing)).toFixed(2).replace(/\.00$/,"");
   $("swingVal").textContent = `${S.swing}% · ${ratio}:1`;
-  const swingable = S.sub===2||S.sub===4;
+  const swingable = !isCompound() && (S.sub===2||S.sub===4);
   $("swingPanel").querySelectorAll("input,button").forEach(el=>el.disabled=!swingable);
   $("swingPanel").querySelectorAll(".row").forEach(r=>r.classList.toggle("dim",!swingable));
   $("swingNote").textContent = swingable
     ? "Swing pushes the off-beat notes later. With 8ths the “&” moves; with 16ths the “e” and “a” move. 67% matches a triplet feel."
+    : isCompound() ? "Compound time already has a swung feel, so swing is off here."
     : "Swing works with 8ths and 16ths. Pick one of those to use it. Triplets already have the swung long-short shape (try the Shuffle group).";
   $("feel").textContent = feelText();
   $("vVoice").value=S.vVoice; $("vBeat").value=S.vBeat; $("vSub").value=S.vSub;
   $("accent").checked=S.accent; $("numbersOnly").checked=S.numbersOnly; $("clickRests").checked=S.clickRests;
 }
-function setBpm(v){ S.bpm = Math.max(30, Math.min(260, Math.round(+v||S.bpm))); save(); syncUI(); }
+function setBpm(v){ S.bpm = Math.max(30, Math.min(300, Math.round(+v||S.bpm))); save(); syncUI(); }
 
 for(let i=1;i<=12;i++){ const o=document.createElement("option"); o.value=i; o.textContent=i; $("beatsPer").appendChild(o); }
 
@@ -464,17 +537,38 @@ $("minus").onclick = ()=>setBpm(S.bpm-1);
 $("plus").onclick = ()=>setBpm(S.bpm+1);
 $("beatsPer").onchange = e=>{
   const n=+e.target.value, old=S.pattern;
-  S.beats=n; S.pattern = Array.from({length:n},(_,b)=> (old[b]||old[0]||Array(S.sub).fill(1)).slice());
+  S.beats=n; S.simpleBeats=n; S.pattern = Array.from({length:n},(_,b)=> (old[b]||old[0]||Array(S.sub).fill(1)).slice());
   save(); renderBeats(); renderPresets(); restartIfPlaying();
 };
 document.querySelectorAll("#subSeg button").forEach(b=>b.onclick=()=>{
-  S.sub=+b.dataset.sub; S.pattern=freshPattern(); save(); syncUI(); renderBeats(); renderPresets(); restartIfPlaying();
+  S.sub=+b.dataset.sub; S.simpleSub=S.sub; S.pattern=freshPattern(); save(); syncUI(); renderBeats(); renderPresets(); restartIfPlaying();
 });
 $("tripStyle").onchange = e=>{ S.trip=e.target.value; save(); renderBeats(); renderPresets(); };
 $("swing").oninput = e=>{ S.swing=+e.target.value; save(); syncUI(); };
 document.querySelectorAll("[data-sw]").forEach(b=>b.onclick=()=>{ S.swing=+b.dataset.sw; save(); syncUI(); });
 ["vVoice","vBeat","vSub"].forEach(id=>$(id).oninput=e=>{ S[id]=+e.target.value; save(); });
 ["accent","numbersOnly","clickRests"].forEach(id=>$(id).onchange=e=>{ S[id]=e.target.checked; save(); });
+function applyMeter(){
+  if(!isCompound()){ S.beats=S.simpleBeats; S.sub=S.simpleSub; }
+  else if(isEighthPulse()){ S.beats=+S.meter; S.sub=1; }
+  else { S.beats=+S.meter/3; S.sub=3; }
+  S.pattern=freshPattern(); save(); syncUI(); renderBeats(); renderPresets(); restartIfPlaying();
+}
+document.querySelectorAll("#meterSeg button").forEach(b=>b.onclick=()=>{
+  const was=isCompound(), wasEighth=isEighthPulse();
+  S.meter=b.dataset.m;
+  if(!was && isCompound()){ S.trip="and"; if(S.pulse==="eighth") S.bpm=Math.min(300,S.bpm*3); }
+  if(was && !isCompound() && wasEighth) S.bpm=Math.max(30,Math.round(S.bpm/3));
+  applyMeter();
+});
+document.querySelectorAll("#pulseSeg button").forEach(b=>b.onclick=()=>{
+  if(S.pulse===b.dataset.p) return;
+  S.pulse=b.dataset.p;
+  // keep the same musical speed: one dotted quarter = three eighths
+  S.bpm = S.pulse==="eighth" ? Math.min(300,S.bpm*3) : Math.max(30,Math.round(S.bpm/3));
+  applyMeter();
+});
+$("clickType").onchange = e=>{ S.clickType=e.target.value; save(); };
 $("resetBeats").onclick = ()=>{ S.pattern=freshPattern(); save(); renderBeats(); renderPresets(); };
 
 let taps=[];
